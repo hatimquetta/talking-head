@@ -39,6 +39,10 @@ final/
 Every tool writes into `final/output/…` by default (regardless of where you run it
 from), so you don't need to pass `-o` unless you want a custom path.
 
+> **Paths in examples below** use forward slashes (`final/...`). These work on **macOS,
+> Linux, and Windows** when running Python. On Windows you can also use backslashes
+> (`final\...`) if you prefer.
+
 ---
 
 # How to run — step by step (A → Z)
@@ -120,21 +124,34 @@ Download that `animations/` folder from Drive and drop the files into your local
 ## Stage 2 — Sequence the animation (local)
 
 ### 1. Install the prerequisites (one time)
-- **Python 3.10+**
-- **ffmpeg + ffprobe** on PATH:
-  - Windows: `winget install Gyan.FFmpeg`
-  - macOS: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
-- `pip install -r final/requirements.txt`  (installs `edge-tts` for Stage 3)
-- An **internet connection** for the TTS step (Microsoft neural voices).
+
+| Tool | macOS | Linux | Windows |
+|---|---|---|---|
+| Python 3.10+ | `brew install python` or [python.org](https://www.python.org/downloads/) | `sudo apt install python3 python3-pip` | [python.org](https://www.python.org/downloads/) |
+| ffmpeg + ffprobe | `brew install ffmpeg` | `sudo apt install ffmpeg` | `winget install Gyan.FFmpeg` |
+| Python deps | `pip install -r final/requirements.txt` | same | `pip install -r final/requirements.txt` *(or `py -m pip install -r final/requirements.txt`)* |
+
+Confirm ffmpeg is available: `ffmpeg -version` and `ffprobe -version`.
+
+An **internet connection** is needed for the TTS step (Stage 3).
 
 ### 2. Build the idle → speaking → idle clip
+
 Outputs auto-land in `final/output/…`:
-```powershell
+
+```bash
 # arg1 = a headshot image (static 3s ends) OR a *_idle.mp4 (subtle motion)
 # arg2 = the talking animation   |   arg3 = S (speaking seconds; use the tts.py duration)
-python final\sequencer.py final\headshots\person_01.png final\output\animations\person_01_talking.mp4 8.40
+
+python final/sequencer.py final/headshots/person_01.png final/output/animations/person_01_talking.mp4 8.40
 #   -> final/output/sequenced/person_01_talking_sequenced.mp4   (silent, 6+S long)
+```
+
+If you are already inside the `final/` folder you can shorten paths:
+
+```bash
+cd final
+python sequencer.py headshots/person_01.png output/animations/person_01_talking.mp4 8.40
 ```
 
 ---
@@ -146,13 +163,27 @@ the animation **in sync**, keeps them as **separate assets** (nothing muxed), an
 idle when the audio ends.
 
 ### 1. Generate the voice
-```powershell
-python final\tts.py "Hey there, great to meet you." --gender male
+
+```bash
+python final/tts.py "Hey there, great to meet you." --gender male
 #   -> final/output/audio/tts_output.mp3   (also prints the duration = your S)
 ```
 
+(`-g male` is a shorthand for `--gender male`.)
+
 ### 2. Play it — open `final/playback.html`
-Double-click **`final/playback.html`** (opens in any browser), then:
+
+Open the player in your browser:
+
+| Platform | Command |
+|---|---|
+| macOS | `open final/playback.html` |
+| Linux | `xdg-open final/playback.html` |
+| Windows | `start final/playback.html` |
+
+Or double-click `playback.html` in your file manager.
+
+Then in the browser:
 1. **Idle** — load a headshot image *or* a `_idle.mp4` (optional).
 2. **Talking animation** — load the `_talking.mp4`.
 3. **TTS audio** — load the `.mp3` from step 1.
@@ -163,10 +194,12 @@ The audio (an `<audio>` element) and the animation (a muted `<video>`) play in p
 are **never combined** — exactly what M3 requires.
 
 ### Optional — bake into one file
+
 For a single shareable clip (or a separate padded audio track that lines up 1:1 with the
 silent video), run `attach_audio.py` on the Stage-2 sequenced video:
-```powershell
-python final\attach_audio.py final\output\sequenced\person_01_talking_sequenced.mp4 final\output\audio\tts_output.mp3
+
+```bash
+python final/attach_audio.py final/output/sequenced/person_01_talking_sequenced.mp4 final/output/audio/tts_output.mp3
 #   -> final/output/with_audio/..._with_audio.mp4     (one file, muxed)
 #   -> final/output/with_audio/..._audio_padded.m4a   (separate, same length as the video)
 ```
