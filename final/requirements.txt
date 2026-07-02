@@ -1,0 +1,20 @@
+# ── Talking-Head Pipeline — local CLI tools ──────────────────
+# Install with:  pip install -r requirements.txt
+#
+# Covers the local command-line tools:
+#   tts.py           needs edge-tts (below) + internet
+#   sequencer.py     ffmpeg only (no pip packages)
+#   attach_audio.py  ffmpeg only (no pip packages)
+
+edge-tts>=6.1.0
+
+# ── System dependency (NOT installable via pip) ──────────────
+# ffmpeg + ffprobe must be on your PATH:
+#   Windows :  winget install Gyan.FFmpeg
+#   macOS   :  brew install ffmpeg
+#   Linux   :  sudo apt install ffmpeg
+#
+# ── Milestone 1 (pipeline.ipynb) ─────────────────────────────
+# The LivePortrait animation stage needs a GPU and is run on Google Colab.
+# pipeline.ipynb installs its own stack there (LivePortrait, torch,
+# onnxruntime, huggingface_hub, edge-tts) — nothing to install locally for it.

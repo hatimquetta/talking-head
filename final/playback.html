@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Talking-Head Playback (Milestone 3)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:#111318; color:#e7e9ee; margin:0; padding:28px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:#9aa3b2; font-size:13px; margin-bottom:22px; max-width:640px; line-height:1.5; }
+  .row { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; }
+  .panel { background:#191c23; border:1px solid #262a33; border-radius:12px; padding:18px; }
+  label { display:block; font-size:13px; margin:12px 0 4px; color:#c3c9d6; }
+  input[type=file] { font-size:12px; color:#c3c9d6; max-width:280px; }
+  #stage { position:relative; width:512px; height:512px; max-width:82vw; aspect-ratio:1/1; background:#000; border-radius:12px; overflow:hidden; }
+  #stage .layer { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .3s ease; }
+  #stage .layer.show { opacity:1; }
+  .controls { margin-top:16px; display:flex; gap:10px; align-items:center; }
+  button { font-size:14px; padding:9px 20px; border-radius:9px; border:0; cursor:pointer; font-weight:600; }
+  #play { background:#3b82f6; color:#fff; }
+  #stop { background:#333a46; color:#e7e9ee; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #state { font-size:13px; color:#9aa3b2; margin-left:6px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#6b7280; margin-right:7px; vertical-align:middle; }
+  .dot.speaking { background:#22c55e; }
+  .note { font-size:12px; color:#8b93a4; margin-top:18px; line-height:1.6; max-width:300px; }
+  code { background:#0d0f14; padding:1px 5px; border-radius:4px; color:#cdd3df; }
+</style>
+</head>
+<body>
+  <h1>Talking-Head Playback</h1>
+  <div class="sub">
+    Plays the TTS audio and the talking animation together, then eases back to the idle
+    state the moment the audio ends. The audio and the video are <b>separate files played in
+    parallel</b> &mdash; nothing is muxed into a single video (per the Milestone&nbsp;3 spec).
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <label>Idle &mdash; headshot image <i>or</i> idle animation (optional)</label>
+      <input type="file" id="idleFile" accept="image/*,video/*">
+
+      <label>Talking animation (video)</label>
+      <input type="file" id="talkFile" accept="video/*">
+
+      <label>TTS audio (produced by <code>tts.py</code>)</label>
+      <input type="file" id="audioFile" accept="audio/*">
+
+      <div class="controls">
+        <button id="play" disabled>&#9654; Play</button>
+        <button id="stop" disabled>&#9632; Stop</button>
+        <span id="state"><span class="dot"></span>idle</span>
+      </div>
+
+      <div class="note">
+        1. Make the audio: <code>python tts.py "your text" -g male</code><br>
+        2. Load the idle (or headshot), the talking clip, and that audio.<br>
+        3. Press <b>Play</b> &mdash; the voice plays while the mouth moves; when the voice
+        ends it eases back to idle. Press <b>Stop</b> to return immediately.
+      </div>
+    </div>
+
+    <div class="panel">
+      <div id="stage">
+        <img   id="idleImg" class="layer" alt="">
+        <video id="idleVid" class="layer" loop muted playsinline></video>
+        <video id="talkVid" class="layer" loop muted playsinline></video>
+      </div>
+    </div>
+  </div>
+
+  <!-- The voice lives here, as a SEPARATE asset from the (muted) video layers. -->
+  <audio id="tts"></audio>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const idleImg = $('idleImg'), idleVid = $('idleVid'), talkVid = $('talkVid'), tts = $('tts');
+  const playBtn = $('play'), stopBtn = $('stop'), stateEl = $('state');
+  let idleIsVideo = false, hasIdle = false, hasTalk = false, hasAudio = false;
+
+  const setState = speaking => {
+    stateEl.innerHTML = `<span class="dot${speaking ? ' speaking' : ''}"></span>${speaking ? 'speaking' : 'idle'}`;
+  };
+
+  function showIdle() {
+    talkVid.classList.remove('show');
+    if (hasIdle) {
+      if (idleIsVideo) { idleVid.classList.add('show'); idleImg.classList.remove('show'); idleVid.play().catch(()=>{}); }
+      else             { idleImg.classList.add('show'); idleVid.classList.remove('show'); }
+    } else {
+      // Fallback: no idle supplied -> hold the talking clip's neutral first frame.
+      talkVid.classList.add('show');
+    }
+    setState(false);
+    stopBtn.disabled = true;
+  }
+
+  function showSpeaking() {
+    idleImg.classList.remove('show');
+    idleVid.classList.remove('show');
+    talkVid.classList.add('show');
+    setState(true);
+    stopBtn.disabled = false;
+  }
+
+  function toIdle() {                 // called on Stop and when the audio ends
+    tts.pause();
+    showIdle();
+    // after the crossfade, park the talking loop back at its neutral frame
+    setTimeout(() => {
+      if (stateEl.textContent.trim() === 'idle') { talkVid.pause(); talkVid.currentTime = 0; }
+    }, 320);
+  }
+
+  $('idleFile').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f);
+    idleIsVideo = f.type.startsWith('video');
+    if (idleIsVideo) idleVid.src = url; else idleImg.src = url;
+    hasIdle = true; showIdle();
+  };
+  $('talkFile').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    talkVid.src = URL.createObjectURL(f); talkVid.load(); hasTalk = true;
+    if (!hasIdle) showIdle();        // use the talking neutral frame as the idle fallback
+    playBtn.disabled = !(hasTalk && hasAudio);
+  };
+  $('audioFile').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    tts.src = URL.createObjectURL(f); hasAudio = true;
+    playBtn.disabled = !(hasTalk && hasAudio);
+  };
+
+  playBtn.onclick = () => {
+    talkVid.currentTime = 0; talkVid.play().catch(()=>{});
+    tts.currentTime = 0;
+    tts.play().then(showSpeaking).catch(err => alert('Could not play audio: ' + err));
+  };
+  stopBtn.onclick = toIdle;
+  tts.addEventListener('ended', toIdle);   // audio finished -> smoothly back to idle
+
+  showIdle();
+})();
+</script>
+</body>
+</html>

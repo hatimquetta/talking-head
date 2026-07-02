@@ -1,0 +1,36 @@
+# ── Python / venv ────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ── Notebook / OS / editor cruft ─────────────────────────────
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
+
+# ── Downloaded models & generated outputs ────────────────────
+outputs/
+models/
+
+# ── Machine-local tool settings (don't share) ────────────────
+.claude/settings.local.json
+
+# ── Media: ignore ALL video/audio ────────────────────────────
+# Only the headshot images (.png/.jpg — not listed here) and the driving
+# templates (re-included below) should be uploaded.
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.flac
+*.ogg
+
+# ...but KEEP the driving-template videos (any template_*.mp4, anywhere)
+!template_*.mp4
