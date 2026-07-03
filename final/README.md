@@ -6,7 +6,7 @@ The pipeline has three stages:
 
 | Stage | What it does | Where it runs |
 |---|---|---|
-| **M1 — Animate** | Headshot → idle + talking animations (LivePortrait) | Google Colab (GPU) — `animations.ipynb` / `pipeline.ipynb` |
+| **M1 — Animate** | Headshot → idle + talking animations (LivePortrait) | Google Colab (GPU) — see notebooks below |
 | **M2 — Sequence** | Idle (3s) + speaking (S) + idle (3s), seamless loops | Local — `sequencer.py` |
 | **M3 — Voice + Playback** | Text → speech, then a player that plays the voice alongside the animation and returns to idle when it ends (assets stay separate) | Local — `tts.py`, `playback.html` |
 
@@ -20,10 +20,12 @@ starts and ends on a neutral frame and loops with no visible seam.
 ```
 final/
 ├── pipeline.ipynb        # M1–M3 end-to-end for a batch of headshots (Colab GPU)
-├── animations.ipynb      # M1 only: LivePortrait talking (+ optional idle) — Colab GPU
+├── animations.ipynb      # M1 only: LivePortrait — batch upload or Google Drive
+├── animations_interactive.ipynb  # Full Colab workflow: animate, TTS, stitch (4 stages, auto-download)
 ├── sequencer.py          # M2 CLI: idle + speaking + idle  ->  6+S video
 ├── tts.py                # M3 CLI: text  ->  speech audio (male / female voice)
-├── playback.html         # M3 player: plays voice + animation together, returns to idle on end
+├── playback.html         # M3 player: synced playback, returns to idle on audio end
+├── playback_flexible.html  # M3 player: any-length audio/video, loops short clips, fade to idle
 ├── attach_audio.py       # M3 optional: bake voice into one mp4 / make a padded separate audio
 ├── headshots/            # 8 sample client headshots (person_01..08)
 ├── templates/            # driving videos: template_talking.mp4 + template_idle.mp4
@@ -49,10 +51,35 @@ from), so you don't need to pass `-o` unless you want a custom path.
 
 ## Stage 1 — Animate the headshots (Google Colab, GPU)
 
-LivePortrait needs a GPU, so this stage runs on **Google Colab** with your files on
-**Google Drive**.
+LivePortrait needs a GPU, so this stage runs on **Google Colab**. Pick a notebook:
 
-### 1. Create the Drive folder structure
+| Notebook | Best for |
+|---|---|
+| **`animations_interactive.ipynb`** | Full guided pipeline in Colab — animate, TTS, stitch talking+audio, stitch idle+talking+audio (auto-download each step) |
+| **`animations.ipynb`** | Batch upload or Google Drive workflow |
+| **`pipeline.ipynb`** | Full M1–M3 batch on Drive |
+
+### Interactive pipeline — `animations_interactive.ipynb` (all-in-one Colab)
+
+Markdown + code cells. Run **setup** once, then four stages:
+
+| Stage | What it does |
+|---|---|
+| **1 — Animate** | Upload headshots (batch) + talking/idle templates (one-by-one). Renders every headshot × template as `{headshot}_{template}_talking.mp4` / `_idle.mp4`. **Downloads each file immediately.** |
+| **2 — Voice** | Edit `TEXT` / `GENDER` / voice options → edge-tts audio. **Downloads** the `.mp3`. |
+| **3 — Talking + audio** | Upload talking clip + audio. Boomerang loop/ease to audio length, mux together. **Downloads** result. |
+| **4 — Full clip** | Upload idle + talking + audio. Duration from audio; **0.5s video lead/tail** around the voice; idle + speaking + idle. **Downloads** result. |
+
+1. Open **`animations_interactive.ipynb`** in Colab → **Runtime ▸ T4 GPU**.
+2. Run cells top to bottom (read each short markdown note first).
+
+> Each stage triggers a browser download — use **Save As** to pick the folder on your computer.
+
+---
+
+### Google Drive — `animations.ipynb` or `pipeline.ipynb`
+
+#### 1. Create the Drive folder structure
 In your Google Drive, under **My Drive**, create a folder named **`talking_head`** laid
 out exactly like this:
 
@@ -182,6 +209,10 @@ Open the player in your browser:
 | Windows | `start final/playback.html` |
 
 Or double-click `playback.html` in your file manager.
+
+**Any-length clips:** use **`playback_flexible.html`** instead — idle loops continuously,
+the talking video plays a trimmed core segment (first/last 0.5s skipped) and loops if
+shorter than the audio, then fades back to idle when the audio ends.
 
 Then in the browser:
 1. **Idle** — load a headshot image *or* a `_idle.mp4` (optional).

@@ -57,7 +57,7 @@ internet for TTS).
 
 | Path | What it is |
 |---|---|
-| **`final/`** | ⭐ The deliverable — `animations.ipynb` + `pipeline.ipynb` (Colab), `sequencer.py`, `tts.py`, `playback.html`, `attach_audio.py` (local), sample `headshots/` + `templates/`, and its own README. |
+| **`final/`** | ⭐ The deliverable — `animations_interactive.ipynb`, `animations.ipynb`, `pipeline.ipynb` (Colab), `sequencer.py`, `tts.py`, `playback.html`, `attach_audio.py` (local), sample `headshots/` + `templates/`, and its own README. |
 | `test/` | Experimentation notebooks used to build & validate the pipeline. Kept for reference (generated media is git-ignored). |
 | `scripts/` | Modular, reusable Python: `m1/` model wrappers, `m3/` TTS, `utils/` shared video/audio helpers. |
 | `notebooks/` | Early per-model Colab notebooks (LivePortrait / SadTalker / Wav2Lip) — see [`docs/M1_HOW_TO_RUN.md`](docs/M1_HOW_TO_RUN.md) for the R&D workflow. |
@@ -96,7 +96,7 @@ Two `requirements.txt` files exist on purpose:
 
 | # | Focus | Deliverable |
 |---|---|---|
-| **M1** | Natural speaking animation | LivePortrait idle + talking clips per headshot (`animations.ipynb` / `pipeline.ipynb`) |
+| **M1** | Natural speaking animation | LivePortrait clips (`animations_interactive.ipynb`, `animations.ipynb`, or `pipeline.ipynb`) |
 | **M2** | Programmatic sequencing | `sequencer.py` — seamless `idle → speaking → idle` |
 | **M3** | Synchronized audio + playback | `tts.py` + `playback.html` (primary); `attach_audio.py` (optional mux) |
 
