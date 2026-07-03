@@ -25,7 +25,7 @@ final/
 ├── sequencer.py          # M2 CLI: idle + speaking + idle  ->  6+S video
 ├── tts.py                # M3 CLI: text  ->  speech audio (male / female voice)
 ├── playback.html         # M3 player: synced playback, returns to idle on audio end
-├── playback_flexible.html  # M3 player: any-length audio/video, loops short clips, fade to idle
+├── playback_flexible.html  # M3 player: timed idle in/out, any-length clips, optional final headshot
 ├── attach_audio.py       # M3 optional: bake voice into one mp4 / make a padded separate audio
 ├── headshots/            # 8 sample client headshots (person_01..08)
 ├── templates/            # driving videos: template_talking.mp4 + template_idle.mp4
@@ -210,9 +210,8 @@ Open the player in your browser:
 
 Or double-click `playback.html` in your file manager.
 
-**Any-length clips:** use **`playback_flexible.html`** instead — idle loops continuously,
-the talking video plays a trimmed core segment (first/last 0.5s skipped) and loops if
-shorter than the audio, then fades back to idle when the audio ends.
+**Any-length clips:** use **`playback_flexible.html`** instead — black until **Start**;
+idle lead-in (X s) → talking + audio → idle outro (Y s) → optional final headshot.
 
 Then in the browser:
 1. **Idle** — load a headshot image *or* a `_idle.mp4` (optional).

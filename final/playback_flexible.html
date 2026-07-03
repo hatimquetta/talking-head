@@ -12,6 +12,9 @@
   .panel { background:#191c23; border:1px solid #262a33; border-radius:12px; padding:18px; }
   label { display:block; font-size:13px; margin:12px 0 4px; color:#c3c9d6; }
   input[type=file] { font-size:12px; color:#c3c9d6; max-width:280px; }
+  input[type=number] { width:72px; background:#0d0f14; border:1px solid #262a33; color:#e7e9ee; border-radius:6px; padding:6px 8px; font-size:13px; }
+  .timing { display:flex; gap:16px; flex-wrap:wrap; margin-top:4px; }
+  .timing label { margin-top:8px; }
   #stage { position:relative; width:512px; height:512px; max-width:82vw; aspect-ratio:1/1; background:#000; border-radius:12px; overflow:hidden; }
   #stage .layer { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; transition:opacity .55s ease; pointer-events:none; }
   #stage .layer.show { opacity:1; }
@@ -22,8 +25,8 @@
   button:disabled { opacity:.4; cursor:not-allowed; }
   #state { font-size:13px; color:#9aa3b2; margin-left:6px; }
   .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#6b7280; margin-right:7px; vertical-align:middle; }
-  .dot.speaking { background:#22c55e; }
-  .note { font-size:12px; color:#8b93a4; margin-top:18px; line-height:1.6; max-width:320px; }
+  .dot.active { background:#22c55e; }
+  .note { font-size:12px; color:#8b93a4; margin-top:18px; line-height:1.6; max-width:340px; }
   code { background:#0d0f14; padding:1px 5px; border-radius:4px; color:#cdd3df; }
   #meta { font-size:12px; color:#8b93a4; margin-top:10px; line-height:1.5; }
 </style>
@@ -31,16 +34,15 @@
 <body>
   <h1>Talking-Head Playback (Flexible Length)</h1>
   <div class="sub">
-    Load an idle headshot or looping idle animation, a talking clip, and an audio track of
-    <b>any length</b>. The idle layer stays visible whenever you are not speaking. During
-    playback the talking video <b>loops</b> its core segment (first/last 0.5&nbsp;s trimmed)
-    if it is shorter than the audio. When the audio ends, the player <b>fades back</b> to idle. Audio and video remain <b>separate assets</b>
-    played in parallel.
+    Load your assets, set idle lead-in/out durations, then press <b>Start</b>. Nothing plays
+    until then. Sequence: <b>idle (X s)</b> → <b>talking + audio</b> → <b>idle (Y s)</b> →
+    optional final headshot. Talking video loops its trimmed core if shorter than the audio.
+    Assets stay separate (never muxed).
   </div>
 
   <div class="row">
     <div class="panel">
-      <label>Idle — headshot image <i>or</i> idle animation (loops continuously)</label>
+      <label>Idle — headshot image <i>or</i> idle animation (for start &amp; end phases)</label>
       <input type="file" id="idleFile" accept="image/*,video/*">
 
       <label>Talking animation (video, any length)</label>
@@ -49,28 +51,36 @@
       <label>Audio (any length)</label>
       <input type="file" id="audioFile" accept="audio/*">
 
+      <label>Final headshot after idle end <i>(optional)</i></label>
+      <input type="file" id="finalFile" accept="image/*">
+
+      <div class="timing">
+        <label>Idle start (X s) <input type="number" id="idleStartSec" value="3" min="0" step="0.5"></label>
+        <label>Idle end (Y s) <input type="number" id="idleEndSec" value="3" min="0" step="0.5"></label>
+      </div>
+
       <div class="controls">
-        <button id="play" disabled>&#9654; Play</button>
+        <button id="play" disabled>&#9654; Start</button>
         <button id="stop" disabled>&#9632; Stop</button>
-        <span id="state"><span class="dot"></span>idle</span>
+        <span id="state"><span class="dot"></span>ready</span>
       </div>
 
       <div id="meta"></div>
 
       <div class="note">
-        The idle image or video is shown by default. Press <b>Play</b> to start the audio
-        and talking animation together. The first and last <b>0.5&nbsp;s</b> of the talking
-        clip are skipped so mouth motion lines up with the audio. If the talking clip is
-        shorter than the audio it will loop that trimmed segment until the audio finishes, then fade back to idle. Press <b>Stop</b> to
-        return to idle immediately.
+        The stage stays <b>black</b> until you press <b>Start</b>. Idle start plays for
+        <b>X</b> seconds, then talking video + audio run together (±0.5&nbsp;s trimmed from
+        the talking clip). When audio ends, idle plays for <b>Y</b> seconds, then an optional
+        final headshot appears — otherwise the stage goes black again.
       </div>
     </div>
 
     <div class="panel">
       <div id="stage">
-        <img   id="idleImg" class="layer" alt="">
-        <video id="idleVid" class="layer" loop muted playsinline></video>
-        <video id="talkVid" class="layer" muted playsinline></video>
+        <img   id="idleImg"  class="layer" alt="">
+        <video id="idleVid"  class="layer" loop muted playsinline></video>
+        <video id="talkVid"  class="layer" muted playsinline></video>
+        <img   id="finalImg" class="layer" alt="">
       </div>
     </div>
   </div>
@@ -80,107 +90,124 @@
 <script>
 (function () {
   const FADE_MS = 550;
-  const TRIM_LEAD = 0.5;   // skip first 0.5 s of talking clip (ease-in)
-  const TRIM_TAIL = 0.5;   // skip last 0.5 s of talking clip (ease-out)
+  const TRIM_LEAD = 0.5;
+  const TRIM_TAIL = 0.5;
 
   const $ = id => document.getElementById(id);
   const idleImg = $('idleImg');
   const idleVid = $('idleVid');
   const talkVid = $('talkVid');
+  const finalImg = $('finalImg');
   const tts = $('tts');
   const playBtn = $('play');
   const stopBtn = $('stop');
   const stateEl = $('state');
   const metaEl = $('meta');
+  const idleStartInput = $('idleStartSec');
+  const idleEndInput = $('idleEndSec');
 
   let idleIsVideo = false;
   let hasIdle = false;
   let hasTalk = false;
   let hasAudio = false;
+  let hasFinal = false;
+  let playing = false;
   let speaking = false;
   let talkDuration = 0;
   let audioDuration = 0;
+  let sessionId = 0;
+  let timers = [];
 
-  const setState = isSpeaking => {
+  const setState = label => {
+    const active = ['idle-start', 'speaking', 'idle-end'].includes(label);
     stateEl.innerHTML =
-      `<span class="dot${isSpeaking ? ' speaking' : ''}"></span>${isSpeaking ? 'speaking' : 'idle'}`;
+      `<span class="dot${active ? ' active' : ''}"></span>${label}`;
   };
 
   function fmtTime(sec) {
-    if (!isFinite(sec) || sec <= 0) return '—';
+    if (!isFinite(sec) || sec <= 0) return '0s';
     const m = Math.floor(sec / 60);
     const s = (sec % 60).toFixed(1);
     return m ? `${m}m ${s}s` : `${s}s`;
   }
 
+  function getIdleStart() { return Math.max(0, parseFloat(idleStartInput.value) || 0); }
+  function getIdleEnd()   { return Math.max(0, parseFloat(idleEndInput.value) || 0); }
+
   function getTalkPlayWindow() {
     const d = talkVid.duration;
-    if (!isFinite(d) || d <= 0) {
-      return { start: 0, end: 0, trimmed: false, loopDuration: 0 };
-    }
-    if (d <= TRIM_LEAD + TRIM_TAIL + 0.1) {
-      return { start: 0, end: d, trimmed: false, loopDuration: d };
-    }
+    if (!isFinite(d) || d <= 0) return { start: 0, end: 0, trimmed: false, loopDuration: 0 };
+    if (d <= TRIM_LEAD + TRIM_TAIL + 0.1) return { start: 0, end: d, trimmed: false, loopDuration: d };
     const start = TRIM_LEAD;
     const end = d - TRIM_TAIL;
     return { start, end, trimmed: true, loopDuration: end - start };
   }
 
   function updateMeta() {
-    if (!hasTalk && !hasAudio) {
-      metaEl.textContent = '';
-      return;
-    }
+    const X = getIdleStart();
+    const Y = getIdleEnd();
     let text = '';
-    if (hasTalk) {
-      text += `Talking video: ${fmtTime(talkDuration)}`;
-      const win = getTalkPlayWindow();
-      if (win.trimmed) text += ` (plays ${fmtTime(win.loopDuration)} loop, ±0.5s trimmed)`;
-    }
+    if (hasIdle) text += `Idle loaded`;
+    if (hasTalk) text += `${text ? ' · ' : ''}Talking: ${fmtTime(talkDuration)}`;
     if (hasAudio) text += `${text ? ' · ' : ''}Audio: ${fmtTime(audioDuration)}`;
-    if (hasTalk && hasAudio && talkDuration > 0 && audioDuration > 0) {
-      const loopDur = getTalkPlayWindow().loopDuration;
-      text += loopDur < audioDuration
-        ? ' · video will loop during playback'
-        : loopDur > audioDuration
-          ? ' · audio ends first, then fade to idle'
-          : ' · lengths match';
+    if (hasFinal) text += `${text ? ' · ' : ''}Final headshot set`;
+    if (hasTalk && hasAudio && audioDuration > 0) {
+      const total = X + audioDuration + Y;
+      text += `${text ? ' · ' : ''}Timeline: ${fmtTime(X)} idle → ${fmtTime(audioDuration)} speak → ${fmtTime(Y)} idle`;
+      if (hasFinal) text += ` → headshot`;
+      else text += ` → black`;
+      text += ` (${fmtTime(total)}${hasFinal ? '' : '+'} total)`;
     }
     metaEl.textContent = text;
   }
 
   function updatePlayButton() {
-    playBtn.disabled = !(hasTalk && hasAudio) || speaking;
+    playBtn.disabled = !(hasTalk && hasAudio) || playing;
   }
 
-  function applyIdleVisual() {
-    talkVid.classList.remove('show');
+  function clearTimers() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
 
-    if (hasIdle) {
-      if (idleIsVideo) {
-        idleImg.classList.remove('show');
-        idleVid.classList.add('show');
-        idleVid.play().catch(() => {});
-      } else {
-        idleVid.classList.remove('show');
-        idleVid.pause();
-        idleImg.classList.add('show');
-      }
-    } else {
+  function schedule(fn, ms) {
+    const sid = sessionId;
+    const t = setTimeout(() => { if (playing && sid === sessionId) fn(); }, ms);
+    timers.push(t);
+  }
+
+  function hideAll() {
+    [idleImg, idleVid, talkVid, finalImg].forEach(el => el.classList.remove('show'));
+    idleVid.pause();
+    talkVid.pause();
+    tts.pause();
+  }
+
+  function showIdle() {
+    talkVid.classList.remove('show');
+    finalImg.classList.remove('show');
+    if (!hasIdle) return;
+    if (idleIsVideo) {
       idleImg.classList.remove('show');
+      idleVid.classList.add('show');
+      idleVid.play().catch(() => {});
+    } else {
       idleVid.classList.remove('show');
       idleVid.pause();
-      talkVid.classList.add('show');
-      talkVid.pause();
-      talkVid.currentTime = 0;
+      idleImg.classList.add('show');
     }
+  }
+
+  function showFinal() {
+    hideAll();
+    if (hasFinal) finalImg.classList.add('show');
   }
 
   function applySpeakingVisual() {
     idleImg.classList.remove('show');
     idleVid.classList.remove('show');
+    finalImg.classList.remove('show');
     idleVid.pause();
-
     const win = getTalkPlayWindow();
     talkVid.loop = false;
     talkVid.classList.add('show');
@@ -192,55 +219,78 @@
     if (!speaking) return;
     const win = getTalkPlayWindow();
     if (win.end <= win.start) return;
-    if (talkVid.currentTime >= win.end - 0.04) {
-      talkVid.currentTime = win.start;
-    }
+    if (talkVid.currentTime >= win.end - 0.04) talkVid.currentTime = win.start;
   }
 
-  function enterIdle() {
-    if (!speaking && stateEl.textContent.trim() === 'idle') {
-      applyIdleVisual();
-      return;
-    }
-
-    speaking = false;
-    setState(false);
-    stopBtn.disabled = true;
-    updatePlayButton();
-
-    tts.pause();
-    talkVid.loop = false;
-    applyIdleVisual();
-
-    setTimeout(() => {
-      talkVid.pause();
-      talkVid.currentTime = 0;
-    }, FADE_MS + 30);
-  }
-
-  function enterSpeaking() {
+  function beginSpeaking() {
     speaking = true;
-    setState(true);
-    stopBtn.disabled = false;
-    playBtn.disabled = true;
-
-    talkVid.loop = false;
+    setState('speaking');
     applySpeakingVisual();
-
     tts.currentTime = 0;
     tts.play().catch(err => alert('Could not play audio: ' + err));
   }
 
+  function afterAudioEnds() {
+    speaking = false;
+    talkVid.pause();
+    talkVid.loop = false;
+    const Y = getIdleEnd();
+    if (Y > 0 && hasIdle) {
+      setState('idle-end');
+      showIdle();
+      schedule(finishPlayback, Y * 1000);
+    } else {
+      finishPlayback();
+    }
+  }
+
+  function finishPlayback() {
+    playing = false;
+    speaking = false;
+    setState(hasFinal ? 'headshot' : 'done');
+    showFinal();
+    stopBtn.disabled = true;
+    updatePlayButton();
+  }
+
+  function stopAll() {
+    sessionId++;
+    playing = false;
+    speaking = false;
+    clearTimers();
+    hideAll();
+    setState('ready');
+    stopBtn.disabled = true;
+    updatePlayButton();
+  }
+
+  function startPlayback() {
+    if (!(hasTalk && hasAudio)) return;
+    sessionId++;
+    playing = true;
+    speaking = false;
+    clearTimers();
+    hideAll();
+    stopBtn.disabled = false;
+    playBtn.disabled = true;
+
+    const X = getIdleStart();
+    if (X > 0 && hasIdle) {
+      setState('idle-start');
+      showIdle();
+      schedule(beginSpeaking, X * 1000);
+    } else if (X > 0 && !hasIdle) {
+      setState('idle-start');
+      schedule(beginSpeaking, X * 1000);
+    } else {
+      beginSpeaking();
+    }
+  }
+
   function readDuration(el) {
     return new Promise(resolve => {
-      const finish = () => {
-        const d = el.duration;
-        resolve(isFinite(d) && d > 0 ? d : 0);
-      };
-      if (el.readyState >= 1) {
-        finish();
-        return;
-      }
+      const finish = () => resolve(isFinite(el.duration) && el.duration > 0 ? el.duration : 0);
+      if (el.readyState >= 1) return finish();
       el.addEventListener('loadedmetadata', finish, { once: true });
       setTimeout(finish, 4000);
     });
@@ -249,29 +299,24 @@
   $('idleFile').onchange = async e => {
     const f = e.target.files[0];
     if (!f) return;
-
     const url = URL.createObjectURL(f);
     idleIsVideo = f.type.startsWith('video/');
-
     if (idleIsVideo) {
       idleVid.src = url;
       idleVid.loop = true;
       idleVid.muted = true;
       idleVid.load();
       await new Promise(r => idleVid.addEventListener('loadeddata', r, { once: true }));
-      idleVid.play().catch(() => {});
     } else {
       idleImg.src = url;
     }
-
     hasIdle = true;
-    if (!speaking) enterIdle();
+    updateMeta();
   };
 
   $('talkFile').onchange = async e => {
     const f = e.target.files[0];
     if (!f) return;
-
     talkVid.src = URL.createObjectURL(f);
     talkVid.loop = false;
     talkVid.load();
@@ -279,13 +324,11 @@
     hasTalk = true;
     updateMeta();
     updatePlayButton();
-    if (!speaking) enterIdle();
   };
 
   $('audioFile').onchange = async e => {
     const f = e.target.files[0];
     if (!f) return;
-
     tts.src = URL.createObjectURL(f);
     audioDuration = await readDuration(tts);
     hasAudio = true;
@@ -293,23 +336,29 @@
     updatePlayButton();
   };
 
-  playBtn.onclick = () => enterSpeaking();
-  stopBtn.onclick = () => enterIdle();
-  tts.addEventListener('ended', () => enterIdle());
+  $('finalFile').onchange = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    finalImg.src = URL.createObjectURL(f);
+    hasFinal = true;
+    updateMeta();
+  };
+
+  idleStartInput.oninput = updateMeta;
+  idleEndInput.oninput = updateMeta;
+
+  playBtn.onclick = () => startPlayback();
+  stopBtn.onclick = () => stopAll();
+  tts.addEventListener('ended', () => { if (playing) afterAudioEnds(); });
   talkVid.addEventListener('timeupdate', onTalkTimeUpdate);
   talkVid.addEventListener('ended', () => {
     if (!speaking) return;
     const win = getTalkPlayWindow();
-    if (win.end > win.start) talkVid.currentTime = win.start;
-    talkVid.play().catch(() => {});
+    if (win.end > win.start) { talkVid.currentTime = win.start; talkVid.play().catch(() => {}); }
   });
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return;
-    if (!speaking && hasIdle && idleIsVideo) idleVid.play().catch(() => {});
-  });
-
-  enterIdle();
+  hideAll();
+  setState('ready');
 })();
 </script>
 </body>
